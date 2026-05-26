@@ -77,7 +77,6 @@ local function SetupEntities()
                     local Index = table.find(Entities, Entity)
                     if Index then table.remove(Entities, Index) end
                 end
-                print(Entity.Name)
                 Humanoid.Died:Once(Remove)
                 Entity.Destroying:Once(Remove)
                 table.insert(Entities, Entity)
