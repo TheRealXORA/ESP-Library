@@ -1,3 +1,4 @@
+--// ngl this is semi pasted from Ai🫩 i knew must of the stuff cba coding it
 local ExecuteUrl, FetchService = function(Url) return loadstring(game:HttpGet(Url, true))() end, function(Name) local Success, Service = pcall(game.GetService, game, Name) return Success and Service end
 local Drawing = loadstring(game:HttpGet("https://raw.githubusercontent.com/TheRealXORA/Drawing/refs/heads/main/Drawing.luau", true))()
 
@@ -43,11 +44,7 @@ local SideAnchor = {
     Right = Vector2.new(0, 0.5),
 }
 
-
-
---// SETUP FUNCTIONS
-
-
+local AutoOffsetElements, AutoOffsetValues = {}, {}
 
 local function SetupPlayers()
     for _, Player in Services.Players:GetPlayers() do
@@ -100,17 +97,17 @@ local function InitClient()
     Client.Tools = {}
     Client.Resolution = Client.Camera and Client.Camera.ViewportSize
     Client.HalfResolution = Client.Resolution and Client.Resolution / 2
-    
+
     local function OnDeath()
         Client.Character, Client.Humanoid, Client.RootPart, Client.Tools = nil, nil, nil, {}
     end
-    
+
     local function TrackDeath()
         if not Client.Humanoid then return end
         Client.Humanoid.Died:Once(OnDeath)
         Client.Player.CharacterRemoving:Once(OnDeath)
     end; TrackDeath()
-    
+
     local function TrackTools()
         local function AddTool(Tool)
             if Tool.ClassName ~= "Tool" or table.find(Client.Tools, Tool) then return end
@@ -124,7 +121,7 @@ local function InitClient()
         Connections.ClientChildAdded = Client.Character.ChildAdded:Connect(AddTool)
         Connections.ClientChildRemoved = Client.Character.ChildRemoved:Connect(RemoveTool)
     end; TrackTools()
-    
+
     Client.Player.CharacterAdded:Connect(function(Character)
         Client.Character = Character
         repeat
@@ -135,19 +132,13 @@ local function InitClient()
         until Client.Humanoid and Client.RootPart and Client.Head
         TrackDeath(); TrackTools()
     end)
-    
+
     RunIn.Heartbeat.Client = function()
         Client.Camera = workspace.CurrentCamera
         Client.Resolution = Client.Camera and Client.Camera.ViewportSize
         Client.HalfResolution = Client.Resolution and Client.Resolution / 2
     end
 end; InitClient()
-
-
-
---// HELPER FUNCTIONS
-
-
 
 local function CleanString(String)
     return String:lower():gsub("%W", "")
@@ -171,7 +162,7 @@ end
 
 local function MakeStyles(StrokeEnabled, StrokeColor)
     local RawGradient, RawStroke, RawStrokeGradient, RawGradientAutoRotation, RawStrokeGradientAutoRotation = NewGradient(), NewStroke(StrokeEnabled, StrokeColor), NewGradient(), NewAutoRotation(), NewAutoRotation()
-    
+
     local GradientAutoRotation = setmetatable({}, {
         __index = RawGradientAutoRotation,
         __newindex = function(_, Key, Value)
@@ -179,7 +170,7 @@ local function MakeStyles(StrokeEnabled, StrokeColor)
             RawGradientAutoRotation[Key] = Value
         end,
     })
-    
+
     local StrokeGradientAutoRotation = setmetatable({}, {
         __index = RawStrokeGradientAutoRotation,
         __newindex = function(_, Key, Value)
@@ -187,7 +178,7 @@ local function MakeStyles(StrokeEnabled, StrokeColor)
             RawStrokeGradientAutoRotation[Key] = Value
         end,
     })
-    
+
     local Gradient = setmetatable({}, {
         __index = function(_, Key)
             return Key == "AutoRotation" and GradientAutoRotation or RawGradient[Key]
@@ -198,7 +189,7 @@ local function MakeStyles(StrokeEnabled, StrokeColor)
             RawGradient[Key] = Value
         end,
     })
-    
+
     local StrokeGradient = setmetatable({}, {
         __index = function(_, Key)
             return Key == "AutoRotation" and StrokeGradientAutoRotation or RawStrokeGradient[Key]
@@ -209,7 +200,7 @@ local function MakeStyles(StrokeEnabled, StrokeColor)
             RawStrokeGradient[Key] = Value
         end,
     })
-    
+
     local Stroke = setmetatable({}, {
         __index = function(_, Key)
             return Key == "Gradient" and StrokeGradient or RawStroke[Key]
@@ -220,7 +211,7 @@ local function MakeStyles(StrokeEnabled, StrokeColor)
             RawStroke[Key] = Value
         end,
     })
-    
+
     return Stroke, Gradient, RawStroke, RawGradient, RawStrokeGradient, RawGradientAutoRotation, RawStrokeGradientAutoRotation
 end
 
@@ -361,11 +352,44 @@ local function NewLabel()
     return Label
 end
 
-
-
---// ESP FUNCTIONS
-
-
+local function ComputeAutoOffsets()
+    AutoOffsetValues = {}
+    local Groups = {}
+    for _, Obj in AutoOffsetElements do
+        if not Obj.AutoOffset or not Obj.Target then continue end
+        local ActiveTargets = GetTargets(Obj.Target, Obj.IncludeLocalPlayer)
+        for _, Target in ActiveTargets do
+            if not IsValid(Target) then continue end
+            Groups[Target]           = Groups[Target] or {}
+            Groups[Target][Obj.Side] = Groups[Target][Obj.Side] or {}
+            table.insert(Groups[Target][Obj.Side], Obj)
+        end
+    end
+    for Target, Sides in Groups do
+        AutoOffsetValues[Target] = {}
+        for Side, Elements in Sides do
+            local DirectionX = Side == "Left" and -1 or Side == "Right" and 1 or 0
+            local DirectionY = Side == "Top"  and -1 or Side == "Bottom" and 1 or 0
+            local Cumulative  = 0
+            local Gap         = 1
+            for _, Obj in Elements do
+                AutoOffsetValues[Target][Obj] = Vector2.new(DirectionX * Cumulative, DirectionY * Cumulative)
+                local ElementSize
+                if Obj.__TYPE == "Tool" then
+                    local IconPart = Obj.ShowIcon and (Obj.IconSize or 30) or 0
+                    local TextPart = Obj.ShowName and (Obj.Size or 11) or 0
+                    local GapPart  = Obj.ShowIcon and Obj.ShowName and 2 or 0
+                    ElementSize = math.max(IconPart + TextPart + GapPart, 1)
+                elseif Obj.__TYPE == "Bar" then
+                    ElementSize = (Obj.Thickness or 2) + 2
+                else
+                    ElementSize = Obj.Size or 15
+                end
+                Cumulative += ElementSize + Gap
+            end
+        end
+    end
+end
 
 local function ESPHighlight()
     local Highlight = {
@@ -380,10 +404,10 @@ local function ESPHighlight()
         AlwaysOnTop = true,
         IncludeLocalPlayer = false,
     }
-    
+
     Objects.Highlights += 1
     local HighlightIndex = Objects.Highlights
-    
+
     Highlight.Remove = function(Self)
         RunIn.Heartbeat["UpdateHighlight" .. HighlightIndex] = nil
         for _, HighlightInstance in Self.__OBJECTS do pcall(HighlightInstance.Destroy, HighlightInstance) end
@@ -391,13 +415,13 @@ local function ESPHighlight()
         pcall(Self.__PARENT.Destroy, Self.__PARENT)
         setmetatable(Self, nil)
     end; Highlight.Destroy = Highlight.Remove
-    
+
     local function ApplyHighlight(HighlightInstance, Target)
         pcall(function()
             HighlightInstance.Parent, HighlightInstance.Adornee, HighlightInstance.Enabled, HighlightInstance.DepthMode, HighlightInstance.FillColor, HighlightInstance.FillTransparency, HighlightInstance.OutlineColor, HighlightInstance.OutlineTransparency = Highlight.__PARENT, Target, Highlight.Enabled, Highlight.AlwaysOnTop and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded, Highlight.FillColor, FlipTransparency(Highlight.FillTransparency), Highlight.OutlineColor, FlipTransparency(Highlight.OutlineTransparency)
         end)
     end
-    
+
     local function UpdateHighlight()
         if not Highlight.Target then return end
         local ActiveTargets, ActiveSet = GetTargets(Highlight.Target, Highlight.IncludeLocalPlayer)
@@ -429,7 +453,7 @@ local function ESPHighlight()
             ApplyHighlight(HighlightInstance, Target)
         end
     end; RunIn.Heartbeat["UpdateHighlight" .. HighlightIndex] = UpdateHighlight
-    
+
     return CreateObject(Highlight, UpdateHighlight)
 end
 
@@ -447,13 +471,13 @@ local function ESPTracer()
         Origin = UDim2.new(0.5, 0, 1, 0),
         IncludeLocalPlayer = false,
     }
-    
+
     Objects.Tracers += 1
     local TracerIndex = Objects.Tracers
-    
+
     local Stroke, Gradient, RawStroke, RawGradient, RawStrokeGradient, RawGradientAutoRotation, RawStrokeGradientAutoRotation = MakeStyles(false, Color3.new(1, 1, 1))
     Tracer.Stroke, Tracer.Gradient = Stroke, Gradient
-    
+
     Tracer.Remove = function(Self)
         RunIn.PreRender["UpdateTracer" .. TracerIndex] = nil
         for _, Line in Self.__OBJECTS do pcall(Line.Remove, Line) end
@@ -461,16 +485,16 @@ local function ESPTracer()
         pcall(Self.__PARENT.Destroy, Self.__PARENT)
         setmetatable(Self, nil)
     end; Tracer.Destroy = Tracer.Remove
-    
+
     local function ApplyTracer(Line)
-        Line.Color, Line.Transparency, Line.Thickness, Line.ZIndex, Line.AnchorPoint = Tracer.Color, Tracer.Transparency, Tracer.Thickness, Tracer.ZIndex, Tracer.AnchorPoint
+        Line.Color, Line.Transparency, Line.Thickness, Line.ZIndex, Line.AnchorPoint = RawGradient.Enabled and Color3.new(1, 1, 1) or Tracer.Color, Tracer.Transparency, Tracer.Thickness, Tracer.ZIndex, Tracer.AnchorPoint
         CopyProperites(Line.Stroke, RawStroke, StrokeKeys)
         CopyGradient(Line.Stroke.Gradient, RawStrokeGradient, RawStrokeGradientAutoRotation)
         CopyProperites(Line.Stroke.Gradient.AutoRotation, RawStrokeGradientAutoRotation, AutoRotationKeys)
         CopyGradient(Line.Gradient, RawGradient, RawGradientAutoRotation)
         CopyProperites(Line.Gradient.AutoRotation, RawGradientAutoRotation, AutoRotationKeys)
     end
-    
+
     local function UpdateTracer()
         if not Tracer.Target then return end
         local ActiveTargets, ActiveSet = GetTargets(Tracer.Target, Tracer.IncludeLocalPlayer)
@@ -504,7 +528,7 @@ local function ESPTracer()
             if not Tracer.Enabled then Line.Visible = false end
         end
     end; RunIn.PreRender["UpdateTracer" .. TracerIndex] = UpdateTracer
-    
+
     return CreateObject(Tracer, UpdateTracer)
 end
 
@@ -519,16 +543,17 @@ local function ESPBox()
         Transparency = 0.5,
         ZIndex = 0,
         Dynamic = true,
-        IncludeAccessories = false,
+        AutoThickness = true,
+        IncludeFullBody = false,
         IncludeLocalPlayer = false,
     }
-    
+
     Objects.Boxes += 1
     local BoxIndex = Objects.Boxes
-    
+
     local Stroke, Gradient, RawStroke, RawGradient, RawStrokeGradient, RawGradientAutoRotation, RawStrokeGradientAutoRotation = MakeStyles(true, Color3.new(0, 0, 0))
     Box.Stroke, Box.Gradient = Stroke, Gradient
-    
+
     Box.Remove = function(Self)
         RunIn.PreRenderSync["UpdateBox" .. BoxIndex] = nil
         for Target, Square in Self.__OBJECTS do
@@ -539,7 +564,13 @@ local function ESPBox()
         pcall(Self.__PARENT.Destroy, Self.__PARENT)
         setmetatable(Self, nil)
     end; Box.Destroy = Box.Remove
-    
+
+    local function GetAutoThicknessValue(Target)
+        local Distance = GetDistance(Target)
+        if Distance <= 0 then return RawStroke.Thickness end
+        return math.clamp(RawStroke.Thickness * 50 / Distance, 1, RawStroke.Thickness)
+    end
+
     local function GetScreenBounds(Target)
         local IsModel = Target:IsA("Model")
         local PartList = IsModel and (Box.IncludeAccessories and Target:GetDescendants() or Target:GetChildren()) or { Target }
@@ -562,16 +593,16 @@ local function ESPBox()
         end
         return Hits > 0 and { MinX, MinY, MaxX - MinX, MaxY - MinY } or nil
     end
-    
-    local function ApplyBox(Square, Bounds)
-        Square.Position, Square.Size, Square.AnchorPoint, Square.Visible, Square.Filled, Square.Color, Square.Transparency, Square.ZIndex = Vector2.new(Bounds[1], Bounds[2]), Vector2.new(Bounds[3], Bounds[4]), Vector2.new(0, 0), Box.Enabled, Box.Filled, Box.Color, Box.Transparency, Box.ZIndex
-        Square.Stroke.Enabled, Square.Stroke.Color, Square.Stroke.Transparency, Square.Stroke.Thickness, Square.Stroke.LineJoinMode = Box.Enabled and RawStroke.Enabled, RawStroke.Color, RawStroke.Transparency, RawStroke.Thickness, RawStroke.LineJoinMode
+
+    local function ApplyBox(Square, Bounds, StrokeThickness)
+        Square.Position, Square.Size, Square.AnchorPoint, Square.Visible, Square.Filled, Square.Color, Square.Transparency, Square.ZIndex = Vector2.new(Bounds[1], Bounds[2]), Vector2.new(Bounds[3], Bounds[4]), Vector2.new(0, 0), Box.Enabled, Box.Filled, RawGradient.Enabled and Color3.new(1, 1, 1) or Box.Color, Box.Transparency, Box.ZIndex
+        Square.Stroke.Enabled, Square.Stroke.Color, Square.Stroke.Transparency, Square.Stroke.Thickness, Square.Stroke.LineJoinMode = Box.Enabled and RawStroke.Enabled, RawStroke.Color, RawStroke.Transparency, StrokeThickness, RawStroke.LineJoinMode
         CopyGradient(Square.Stroke.Gradient, RawStrokeGradient, RawStrokeGradientAutoRotation)
         CopyProperites(Square.Stroke.Gradient.AutoRotation, RawStrokeGradientAutoRotation, AutoRotationKeys)
         CopyGradient(Square.Gradient, RawGradient, RawGradientAutoRotation)
         CopyProperites(Square.Gradient.AutoRotation, RawGradientAutoRotation, AutoRotationKeys)
     end
-    
+
     local function UpdateBox()
         if not Box.Target then return end
         local ActiveTargets, ActiveSet = GetTargets(Box.Target, Box.IncludeLocalPlayer)
@@ -602,11 +633,12 @@ local function ESPBox()
             end
             local Bounds = Box.Dynamic and GetScreenBounds(Target) or GetStaticBounds(Target)
             if not Bounds then Square.Visible, Square.Stroke.Enabled, ActiveBoxBounds[Target] = false, false, nil; continue end
-            ApplyBox(Square, Bounds)
+            local Thickness = Box.AutoThickness and GetAutoThicknessValue(Target) or RawStroke.Thickness
+            ApplyBox(Square, Bounds, Thickness)
             ActiveBoxBounds[Target] = Box.Enabled and Bounds or nil
         end
     end; RunIn.PreRenderSync["UpdateBox" .. BoxIndex] = UpdateBox
-    
+
     return CreateObject(Box, UpdateBox)
 end
 
@@ -621,8 +653,9 @@ local function ESPBar()
         Transparency = 1,
         BackTransparency = 0.5,
         Thickness = 2,
-        Padding = 3,
+        Padding = 0,
         Side = "Left",
+        AutoOffset = true,
         ColorStages = {
             { Value = 1.0, Color = Color3.new(0, 1, 0) },
             { Value = 0.5, Color = Color3.new(1, 1, 0) },
@@ -635,13 +668,14 @@ local function ESPBar()
         end,
         IncludeLocalPlayer = false,
     }
-    
+
     Objects.Bars += 1
     local BarIndex = Objects.Bars
-    
+    table.insert(AutoOffsetElements, Bar)
+
     local Stroke, Gradient, RawStroke, RawGradient, RawStrokeGradient, RawGradientAutoRotation, RawStrokeGradientAutoRotation = MakeStyles(true, Color3.new(0, 0, 0))
     Bar.Stroke, Bar.Gradient = Stroke, Gradient
-    
+
     Bar.Remove = function(Self)
         RunIn.PreRender["UpdateBar" .. BarIndex] = nil
         for _, Pair in Self.__OBJECTS do
@@ -650,9 +684,11 @@ local function ESPBar()
         end
         Objects.Bars -= 1
         pcall(Self.__PARENT.Destroy, Self.__PARENT)
+        local AOIndex = table.find(AutoOffsetElements, Bar)
+        if AOIndex then table.remove(AutoOffsetElements, AOIndex) end
         setmetatable(Self, nil)
     end; Bar.Destroy = Bar.Remove
-    
+
     local function GetFillColor(FillValue)
         local Stages = Bar.ColorStages
         if not Stages or #Stages == 0 then return Bar.Color end
@@ -666,7 +702,7 @@ local function ESPBar()
         if UpperStage.Value == LowerStage.Value then return UpperStage.Color end
         return LowerStage.Color:Lerp(UpperStage.Color, (FillValue - LowerStage.Value) / (UpperStage.Value - LowerStage.Value))
     end
-    
+
     local function GetBarValue(Target)
         local BarValue = Bar.Value
         if typeof(BarValue) == "function" then
@@ -675,39 +711,50 @@ local function ESPBar()
         end
         return math.clamp(BarValue, 0, 1)
     end
-    
+
     local function ComputeBarLayout(Target)
         local BoxBounds = ActiveBoxBounds[Target]
         local Bounds = BoxBounds or GetStaticBounds(Target)
         if not Bounds then return end
+
+        local AutoOff = Vector2.new(0, 0)
+        if Bar.AutoOffset and AutoOffsetValues[Target] then
+            local ExtraOffset = AutoOffsetValues[Target][Bar]
+            if ExtraOffset then AutoOff = ExtraOffset end
+        end
+
         local IsVertical, BarPadding, BarValue, BoundsX, BoundsY, BoundsWidth, BoundsHeight = Bar.Side == "Left" or Bar.Side == "Right", BoxBounds and Bar.Padding or math.max(1, Bar.Padding - 2), GetBarValue(Target), Bounds[1], Bounds[2], Bounds[3], Bounds[4]
         local BackX, BackY, BackWidth, BackHeight, FillX, FillY, FillWidth, FillHeight
-        
+
         if IsVertical then
             BackWidth, BackHeight, BackY = Bar.Thickness, BoundsHeight, BoundsY
-            BackX = Bar.Side == "Left" and BoundsX - BarPadding - Bar.Thickness or BoundsX + BoundsWidth + BarPadding
+            local BaseX = Bar.Side == "Left" and BoundsX - BarPadding - Bar.Thickness or BoundsX + BoundsWidth + BarPadding
+            BackX = BaseX + AutoOff.X
+            BackY = BackY + AutoOff.Y
             FillWidth, FillHeight = BackWidth, math.max(0, BackHeight * BarValue)
             FillX, FillY = BackX, BackY + BackHeight - FillHeight
         else
             BackWidth, BackHeight, BackX = BoundsWidth, Bar.Thickness, BoundsX
-            BackY = Bar.Side == "Top" and BoundsY - BarPadding - Bar.Thickness or BoundsY + BoundsHeight + BarPadding
+            local BaseY = Bar.Side == "Top" and BoundsY - BarPadding - Bar.Thickness or BoundsY + BoundsHeight + BarPadding
+            BackY = BaseY + AutoOff.Y
+            BackX = BackX + AutoOff.X
             FillX, FillY, FillWidth, FillHeight = BackX, BackY, math.max(0, BackWidth * BarValue), BackHeight
         end
-        
+
         return { BackX, BackY, BackWidth, BackHeight }, { FillX, FillY, FillWidth, FillHeight }, BarValue
     end
-    
+
     local function ApplyBar(Pair, BackBounds, FillBounds, BarValue)
         local Back, Fill = Pair.Back, Pair.Fill
         Back.Position, Back.Size, Back.AnchorPoint, Back.Color, Back.Transparency, Back.Filled, Back.Visible, Back.ZIndex = Vector2.new(BackBounds[1], BackBounds[2]), Vector2.new(BackBounds[3], BackBounds[4]), Vector2.new(0, 0), Bar.BackColor, Bar.BackTransparency, true, Bar.Enabled, 1
         Back.Stroke.Enabled, Back.Stroke.Color, Back.Stroke.Transparency, Back.Stroke.Thickness, Back.Stroke.LineJoinMode = Bar.Enabled and RawStroke.Enabled, RawStroke.Color, RawStroke.Transparency, RawStroke.Thickness, RawStroke.LineJoinMode
         CopyGradient(Back.Stroke.Gradient, RawStrokeGradient, RawStrokeGradientAutoRotation)
         CopyProperites(Back.Stroke.Gradient.AutoRotation, RawStrokeGradientAutoRotation, AutoRotationKeys)
-        Fill.Position, Fill.Size, Fill.AnchorPoint, Fill.Color, Fill.Transparency, Fill.Filled, Fill.Visible, Fill.ZIndex, Fill.Stroke.Enabled = Vector2.new(FillBounds[1], FillBounds[2]), Vector2.new(FillBounds[3], FillBounds[4]), Vector2.new(0, 0), GetFillColor(BarValue), Bar.Transparency, true, Bar.Enabled and (FillBounds[3] > 0 and FillBounds[4] > 0), 2, false
+        Fill.Position, Fill.Size, Fill.AnchorPoint, Fill.Color, Fill.Transparency, Fill.Filled, Fill.Visible, Fill.ZIndex, Fill.Stroke.Enabled = Vector2.new(FillBounds[1], FillBounds[2]), Vector2.new(FillBounds[3], FillBounds[4]), Vector2.new(0, 0), RawGradient.Enabled and Color3.new(1, 1, 1) or GetFillColor(BarValue), Bar.Transparency, true, Bar.Enabled and (FillBounds[3] > 0 and FillBounds[4] > 0), 2, false
         CopyGradient(Fill.Gradient, RawGradient, RawGradientAutoRotation)
         CopyProperites(Fill.Gradient.AutoRotation, RawGradientAutoRotation, AutoRotationKeys)
     end
-    
+
     local function UpdateBar()
         if not Bar.Target then return end
         local ActiveTargets, ActiveSet = GetTargets(Bar.Target, Bar.IncludeLocalPlayer)
@@ -744,7 +791,7 @@ local function ESPBar()
             ApplyBar(Pair, BackBounds, FillBounds, BarValue)
         end
     end; RunIn.PreRender["UpdateBar" .. BarIndex] = UpdateBar
-    
+
     return CreateObject(Bar, UpdateBar)
 end
 
@@ -755,27 +802,31 @@ local function ESPName()
         __OBJECTS = {},
         Enabled = true,
         Color = Color3.new(1, 1, 1),
-        Size = 13,
+        Size = 15,
         Transparency = 1,
         ZIndex = 1,
         Side = "Top",
-        Offset = Vector2.new(0, -4),
+        Offset = Vector2.new(0, 0),
         Font = Enum.Font.Roboto,
         UseDisplayName = true,
         Dynamic = false,
+        AutoOffset = true,
         IncludeLocalPlayer = false,
     }
-    
+
     Objects.Names += 1
     local NameIndex = Objects.Names
+    table.insert(AutoOffsetElements, Name)
     Name.Remove = function(Self)
         RunIn.PreRender["UpdateName" .. NameIndex] = nil
         for _, Label in Self.__OBJECTS do pcall(Label.Destroy, Label) end
         Objects.Names -= 1
         pcall(Self.__PARENT.Destroy, Self.__PARENT)
+        local AOIndex = table.find(AutoOffsetElements, Name)
+        if AOIndex then table.remove(AutoOffsetElements, AOIndex) end
         setmetatable(Self, nil)
     end; Name.Destroy = Name.Remove
-    
+
     local function UpdateName()
         if not Name.Target then return end
         local ActiveTargets, ActiveSet = GetTargets(Name.Target, Name.IncludeLocalPlayer)
@@ -801,13 +852,18 @@ local function ESPName()
                 Target.Destroying:Connect(Remove)
             end
             local ScreenPosition = GetLabelPosition(Target, Name.Side, Name.Offset)
+            if Name.AutoOffset and AutoOffsetValues[Target] then
+                local ExtraOffset = AutoOffsetValues[Target][Name]
+                if ExtraOffset and ScreenPosition then ScreenPosition = ScreenPosition + ExtraOffset end
+            end
             if not ScreenPosition then Label.Visible = false; continue end
             local Player = Services.Players:GetPlayerFromCharacter(Target)
             local DisplayName = Player and (Name.UseDisplayName and Player.DisplayName or Player.Name) or Target.Name
-            Label.Visible, Label.TextColor3, Label.TextTransparency, Label.TextSize, Label.Font, Label.Text, Label.ZIndex, Label.AnchorPoint, Label.Position = Name.Enabled, Name.Color, 1 - Name.Transparency, GetScaledSize(Name.Size, Target, Name.Dynamic), Name.Font, DisplayName, Name.ZIndex, SideAnchor[Name.Side], UDim2.fromOffset(ScreenPosition.X, ScreenPosition.Y)
+            local TextSize = GetScaledSize(Name.Size, Target, Name.Dynamic)
+            Label.Visible, Label.TextColor3, Label.TextTransparency, Label.TextSize, Label.Font, Label.Text, Label.ZIndex, Label.AnchorPoint, Label.Position = Name.Enabled, Name.Color, 1 - Name.Transparency, TextSize, Name.Font, DisplayName, Name.ZIndex, SideAnchor[Name.Side], UDim2.fromOffset(ScreenPosition.X, ScreenPosition.Y)
         end
     end; RunIn.PreRender["UpdateName" .. NameIndex] = UpdateName
-    
+
     return CreateObject(Name, UpdateName)
 end
 
@@ -818,28 +874,32 @@ local function ESPDistance()
         __OBJECTS = {},
         Enabled = true,
         Color = Color3.new(1, 1, 1),
-        Size = 12,
+        Size = 15,
         Transparency = 1,
         ZIndex = 1,
         Side = "Bottom",
-        Offset = Vector2.new(0, 4),
+        Offset = Vector2.new(0, 0),
         Suffix = "m",
         Font = Enum.Font.Roboto,
         Dynamic = false,
+        AutoOffset = true,
         IncludeLocalPlayer = false,
     }
-    
+
     Objects.Distances += 1
     local DistanceIndex = Objects.Distances
-    
+    table.insert(AutoOffsetElements, Distance)
+
     Distance.Remove = function(Self)
         RunIn.PreRender["UpdateDistance" .. DistanceIndex] = nil
         for _, Label in Self.__OBJECTS do pcall(Label.Destroy, Label) end
         Objects.Distances -= 1
         pcall(Self.__PARENT.Destroy, Self.__PARENT)
+        local AOIndex = table.find(AutoOffsetElements, Distance)
+        if AOIndex then table.remove(AutoOffsetElements, AOIndex) end
         setmetatable(Self, nil)
     end; Distance.Destroy = Distance.Remove
-    
+
     local function UpdateDistance()
         if not Distance.Target then return end
         local ActiveTargets, ActiveSet = GetTargets(Distance.Target, Distance.IncludeLocalPlayer)
@@ -865,13 +925,18 @@ local function ESPDistance()
                 Target.Destroying:Connect(Remove)
             end
             local ScreenPosition = GetLabelPosition(Target, Distance.Side, Distance.Offset)
+            if Distance.AutoOffset and AutoOffsetValues[Target] then
+                local ExtraOffset = AutoOffsetValues[Target][Distance]
+                if ExtraOffset and ScreenPosition then ScreenPosition = ScreenPosition + ExtraOffset end
+            end
             if not ScreenPosition then Label.Visible = false; continue end
             local TargetDistance = GetDistance(Target)
+            local TextSize = GetScaledSize(Distance.Size, Target, Distance.Dynamic, TargetDistance)
             Label.Visible, Label.TextColor3, Label.TextTransparency, Label.TextSize,
-            Label.Font, Label.Text, Label.ZIndex, Label.AnchorPoint, Label.Position = Distance.Enabled, Distance.Color, 1 - Distance.Transparency, GetScaledSize(Distance.Size, Target, Distance.Dynamic, TargetDistance), Distance.Font, TargetDistance .. Distance.Suffix, Distance.ZIndex, SideAnchor[Distance.Side], UDim2.fromOffset(ScreenPosition.X, ScreenPosition.Y)
+            Label.Font, Label.Text, Label.ZIndex, Label.AnchorPoint, Label.Position = Distance.Enabled, Distance.Color, 1 - Distance.Transparency, TextSize, Distance.Font, TargetDistance .. Distance.Suffix, Distance.ZIndex, SideAnchor[Distance.Side], UDim2.fromOffset(ScreenPosition.X, ScreenPosition.Y)
         end
     end; RunIn.PreRender["UpdateDistance" .. DistanceIndex] = UpdateDistance
-    
+
     return CreateObject(Distance, UpdateDistance)
 end
 
@@ -882,27 +947,31 @@ local function ESPState()
         __OBJECTS = {},
         Enabled = true,
         Color = Color3.new(1, 1, 1),
-        Size = 12,
+        Size = 15,
         Transparency = 1,
         ZIndex = 1,
         Side = "Right",
-        Offset = Vector2.new(4, 0),
+        Offset = Vector2.new(0, 0),
         Font = Enum.Font.Roboto,
         Dynamic = false,
+        AutoOffset = true,
         IncludeLocalPlayer = false,
     }
-    
+
     Objects.States += 1
     local StateIndex = Objects.States
-    
+    table.insert(AutoOffsetElements, State)
+
     State.Remove = function(Self)
         RunIn.PreRender["UpdateState" .. StateIndex] = nil
         for _, Label in Self.__OBJECTS do pcall(Label.Destroy, Label) end
         Objects.States -= 1
         pcall(Self.__PARENT.Destroy, Self.__PARENT)
+        local AOIndex = table.find(AutoOffsetElements, State)
+        if AOIndex then table.remove(AutoOffsetElements, AOIndex) end
         setmetatable(Self, nil)
     end; State.Destroy = State.Remove
-    
+
     local function UpdateState()
         if not State.Target then return end
         local ActiveTargets, ActiveSet = GetTargets(State.Target, State.IncludeLocalPlayer)
@@ -928,11 +997,16 @@ local function ESPState()
                 Target.Destroying:Connect(Remove)
             end
             local ScreenPosition = GetLabelPosition(Target, State.Side, State.Offset)
+            if State.AutoOffset and AutoOffsetValues[Target] then
+                local ExtraOffset = AutoOffsetValues[Target][State]
+                if ExtraOffset and ScreenPosition then ScreenPosition = ScreenPosition + ExtraOffset end
+            end
             if not ScreenPosition then Label.Visible = false; continue end
-            Label.Visible, Label.TextColor3, Label.TextTransparency, Label.TextSize, Label.Font, Label.Text, Label.ZIndex, Label.AnchorPoint, Label.Position = State.Enabled, State.Color, 1 - State.Transparency, GetScaledSize(State.Size, Target, State.Dynamic), State.Font, GetHumanoidState(Target), State.ZIndex, SideAnchor[State.Side], UDim2.fromOffset(ScreenPosition.X, ScreenPosition.Y)
+            local TextSize = GetScaledSize(State.Size, Target, State.Dynamic)
+            Label.Visible, Label.TextColor3, Label.TextTransparency, Label.TextSize, Label.Font, Label.Text, Label.ZIndex, Label.AnchorPoint, Label.Position = State.Enabled, State.Color, 1 - State.Transparency, TextSize, State.Font, GetHumanoidState(Target), State.ZIndex, SideAnchor[State.Side], UDim2.fromOffset(ScreenPosition.X, ScreenPosition.Y)
         end
     end; RunIn.PreRender["UpdateState" .. StateIndex] = UpdateState
-    
+
     return CreateObject(State, UpdateState)
 end
 
@@ -943,23 +1017,25 @@ local function ESPTool()
         __OBJECTS = {},
         Enabled = true,
         Color = Color3.new(1, 1, 1),
-        Size = 11,
+        Size = 15,
         IconSize = 30,
         Transparency = 1,
         ZIndex = 1,
         Side = "Bottom",
-        Offset = Vector2.new(0, 6),
+        Offset = Vector2.new(0, 0),
         ShowIcon = true,
         ShowName = true,
         Font = Enum.Font.Roboto,
         LabelPosition = "Below",
         Dynamic = false,
+        AutoOffset = true,
         IncludeLocalPlayer = false,
     }
-    
+
     Objects.Tools += 1
     local ToolIndex = Objects.Tools
-    
+    table.insert(AutoOffsetElements, Tool)
+
     Tool.Remove = function(Self)
         RunIn.PreRender["UpdateTool" .. ToolIndex] = nil
         for _, Pair in Self.__OBJECTS do
@@ -968,9 +1044,11 @@ local function ESPTool()
         end
         Objects.Tools -= 1
         pcall(Self.__PARENT.Destroy, Self.__PARENT)
+        local AOIndex = table.find(AutoOffsetElements, Tool)
+        if AOIndex then table.remove(AutoOffsetElements, AOIndex) end
         setmetatable(Self, nil)
     end; Tool.Destroy = Tool.Remove
-    
+
     local function UpdateTool()
         if not Tool.Target then return end
         local ActiveTargets, ActiveSet = GetTargets(Tool.Target, Tool.IncludeLocalPlayer)
@@ -1007,17 +1085,22 @@ local function ESPTool()
                 if Player then Player.CharacterRemoving:Connect(Remove) end
                 Target.Destroying:Connect(Remove)
             end
-            
+
             local ScreenPosition, EquippedTool = GetLabelPosition(Target, Tool.Side, Tool.Offset), Target:FindFirstChildOfClass("Tool")
-            
+            if Tool.AutoOffset and AutoOffsetValues[Target] then
+                local ExtraOffset = AutoOffsetValues[Target][Tool]
+                if ExtraOffset and ScreenPosition then ScreenPosition = ScreenPosition + ExtraOffset end
+            end
+
             if not ScreenPosition or not EquippedTool or not Tool.Enabled then
                 Pair.Icon.Visible, Pair.Label.Visible = false, false; continue
             end
-            
+
             local TextureId, TargetDistance, IconX, IconY, LabelX, LabelY = EquippedTool.TextureId ~= "" and EquippedTool.TextureId or "rbxasset://textures/ui/GuiImagePlaceholder.png", GetDistance(Target), ScreenPosition.X, 0, ScreenPosition.X, 0
-            local ScaledTextSize, ScaledIconSize = GetScaledSize(Tool.Size, Target, Tool.Dynamic, TargetDistance), Tool.Dynamic and math.clamp(math.floor(Tool.IconSize * 30 / math.max(TargetDistance, 1)), 6, Tool.IconSize * 2) or Tool.IconSize
+            local ScaledTextSize = GetScaledSize(Tool.Size, Target, Tool.Dynamic, TargetDistance)
+            local ScaledIconSize = Tool.Dynamic and math.clamp(math.floor(Tool.IconSize * 30 / math.max(TargetDistance, 1)), 6, Tool.IconSize * 2) or Tool.IconSize
             local HalfIconSize = ScaledIconSize / 2
-            
+
             if Tool.ShowIcon and Tool.ShowName then
                 if Tool.LabelPosition == "Above" then
                     LabelY, IconY = ScreenPosition.Y, ScreenPosition.Y + ScaledTextSize + 2 + HalfIconSize
@@ -1029,13 +1112,13 @@ local function ESPTool()
             elseif Tool.ShowName then
                 LabelY = ScreenPosition.Y
             end
-            
+
             if Tool.ShowIcon then
                 Pair.Icon.Visible, Pair.Icon.Image, Pair.Icon.ImageTransparency, Pair.Icon.ZIndex, Pair.Icon.Position, Pair.Icon.Size = true, TextureId, 1 - Tool.Transparency, Tool.ZIndex, UDim2.fromOffset(IconX, IconY), UDim2.fromOffset(ScaledIconSize, ScaledIconSize)
             else
                 Pair.Icon.Visible = false
             end
-            
+
             if Tool.ShowName then
                 Pair.Label.Visible, Pair.Label.TextColor3, Pair.Label.TextTransparency, Pair.Label.TextSize, Pair.Label.Font, Pair.Label.Text, Pair.Label.ZIndex, Pair.Label.AnchorPoint, Pair.Label.Position = true, Tool.Color, 1 - Tool.Transparency, ScaledTextSize, Tool.Font, EquippedTool.Name, Tool.ZIndex, Vector2.new(0.5, 0), UDim2.fromOffset(LabelX, LabelY)
             else
@@ -1043,15 +1126,9 @@ local function ESPTool()
             end
         end
     end; RunIn.PreRender["UpdateTool" .. ToolIndex] = UpdateTool
-    
+
     return CreateObject(Tool, UpdateTool)
 end
-
-
-
---// ESP API
-
-
 
 local ESPFunctions = {
     highlight = ESPHighlight,
@@ -1071,14 +1148,9 @@ function ESP.new(Type)
     return Function()
 end
 
-
-
---// CONNECTIONS
-
-
-
 Services.Run:BindToRenderStep("ESPPreRender", 200, function(DeltaTime)
     for _, UpdateFunction in RunIn.PreRenderSync do UpdateFunction(DeltaTime) end
+    ComputeAutoOffsets()
     for _, UpdateFunction in RunIn.PreRender do task.spawn(UpdateFunction, DeltaTime) end
 end)
 
