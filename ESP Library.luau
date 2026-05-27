@@ -573,7 +573,7 @@ local function ESPBox()
 
     local function GetScreenBounds(Target)
         local IsModel = Target:IsA("Model")
-        local PartList = IsModel and (Box.IncludeAccessories and Target:GetDescendants() or Target:GetChildren()) or { Target }
+        local PartList = IsModel and (Box.IncludeFullBody and Target:GetDescendants() or Target:GetChildren()) or { Target }
         local Hits, MinX, MinY, MaxX, MaxY = 0, math.huge, math.huge, -math.huge, -math.huge
         for _, Part in PartList do
             if not Part:IsA("BasePart") or Part.Transparency == 1 then continue end
