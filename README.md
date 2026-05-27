@@ -33,7 +33,7 @@ A modular ESP (Extra Sensory Perception) library for Roblox. Supports players, e
 ## Loading
 
 ```lua
-local ESP = loadstring(game:HttpGet("YOUR_RAW_URL"))()
+local ESP = loadstring(game:HttpGet("https://raw.githubusercontent.com/TheRealXORA/ESP-Library/refs/heads/main/ESP%20Library.luau", true))()
 ```
 
 ---
